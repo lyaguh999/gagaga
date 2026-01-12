@@ -1,0 +1,17 @@
+body {
+    background-color: #1a1a1a; /* Темный фон, как в игре */
+    color: #ccc;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+canvas {
+    background-color: #000;
+    border: 2px solid #555;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
