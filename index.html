@@ -2,14 +2,771 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pixelvania Demo</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Hollow Prototype: The Void</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        canvas {
+            border: 2px solid #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            image-rendering: pixelated; /* Четкие пиксели */
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #ddd;
+            pointer-events: none;
+            text-shadow: 1px 1px 0 #000;
+        }
+        .heart { color: #ff4757; }
+        .soul { color: #3742fa; }
+    </style>
 </head>
 <body>
-    <h1>Pixelvania Demo</h1>
-    <canvas id="gameCanvas"></canvas>
-    <script src="game.js"></script>
+
+<div id="ui">
+    <div>HP: <span class="heart">♥♥♥♥♥</span></div>
+    <div>SOUL: <span class="soul">0</span></div>
+    <div style="font-size: 10px; margin-top: 10px;">Управление: WASD/Стрелки - Движение, ПРОБЕЛ - Прыжок/Рывок, Z - Атака</div>
+</div>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+/**
+ * HOLLOW PROTOTYPE - METROIDVANIA ENGINE
+ * Стиль: Dark Fantasy / Pixel Art
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Настройки экрана и масштаба (Pixel Art style)
+const SCALE = 3; // Размер одного пикселя
+const WIDTH = 320; // Ширина мира в пикселях
+const HEIGHT = 240; // Высота мира в пикселях
+
+canvas.width = WIDTH * SCALE;
+canvas.height = HEIGHT * SCALE;
+
+// Цветовая палитра (как на скриншоте HK)
+const COLORS = {
+    bg: '#1a1c20',
+    fg: '#2d3436',
+    player: '#ffffff',
+    cloak: '#d63031',
+    enemy: '#55efc4',
+    boss: '#fd79a8',
+    platform: '#636e72',
+    spike: '#b2bec3',
+    light: '#ffeaa7',
+    ui: '#dfe6e9'
+};
+
+// Состояние игры
+const game = {
+    camera: { x: 0, y: 0 },
+    keys: {},
+    particles: [],
+    time: 0,
+    state: 'playing' // playing, gameover, win
+};
+
+// --- КЛАССЫ ---
+
+class Player {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.w = 12; this.h = 16;
+        this.vx = 0; this.vy = 0;
+        this.speed = 2;
+        this.jumpForce = 6;
+        this.gravity = 0.3;
+        this.onGround = false;
+        
+        // Статы
+        this.hp = 5;
+        this.maxHp = 5;
+        this.soul = 0;
+        
+        // Анимации
+        this.animFrame = 0;
+        this.animTimer = 0;
+        this.direction = 1; // 1 right, -1 left
+        this.state = 'idle'; // idle, run, jump, attack, dash, hurt
+        this.dashCooldown = 0;
+        this.invulnerable = 0;
+        this.attackTimer = 0;
+    }
+
+    update() {
+        // Управление
+        let move = 0;
+        if (game.keys['ArrowLeft'] || game.keys['a']) move = -1;
+        if (game.keys['ArrowRight'] || game.keys['d']) move = 1;
+        
+        if (move !== 0) this.direction = move;
+
+        // Рывок (Dash) - как в HK
+        if ((game.keys[' '] || game.keys['ArrowUp'] || game.keys['w']) && this.dashCooldown <= 0 && this.onGround) {
+            this.state = 'dash';
+            this.vx = this.direction * 10;
+            this.vy = 0;
+            this.dashCooldown = 30; // Кадры перезарядки
+            this.createDashParticles();
+        }
+
+        // Прыжок
+        if (game.keys[' '] && this.onGround && this.state !== 'dash') {
+            this.vy = -this.jumpForce;
+            this.onGround = false;
+            this.state = 'jump';
+        }
+
+        // Атака
+        if (game.keys['z'] && this.attackTimer <= 0) {
+            this.state = 'attack';
+            this.attackTimer = 20;
+            this.vx = 0; // Остановка при атаке
+            this.createSlash();
+        }
+
+        // Физика
+        if (this.state !== 'dash') {
+            this.vx = move * this.speed;
+        } else {
+            // Затухание рывка
+            this.vx *= 0.9;
+            if (Math.abs(this.vx) < 0.5) this.state = 'idle';
+        }
+
+        this.vy += this.gravity;
+        
+        // Коллизии
+        this.x += this.vx;
+        this.handleCollisionX();
+        
+        this.y += this.vy;
+        this.onGround = false;
+        this.handleCollisionY();
+
+        // Ограничение мира
+        if (this.x < 0) this.x = 0;
+        if (this.x > WIDTH - this.w) this.x = WIDTH - this.w;
+        if (this.y > HEIGHT) this.die(); // Падение в бездну
+
+        // Таймеры
+        if (this.dashCooldown > 0) this.dashCooldown--;
+        if (this.attackTimer > 0) this.attackTimer--;
+        if (this.invulnerable > 0) this.invulnerable--;
+        
+        // Анимация
+        this.animTimer++;
+        if (this.animTimer > 8) {
+            this.animFrame = (this.animFrame + 1) % 4;
+            this.animTimer = 0;
+        }
+
+        // Авто-смена состояний
+        if (this.onGround && this.state !== 'attack' && this.state !== 'hurt' && Math.abs(this.vx) < 0.5) {
+            this.state = 'idle';
+        } else if (this.onGround && Math.abs(this.vx) > 0.5 && this.state !== 'attack' && this.state !== 'hurt') {
+            this.state = 'run';
+        }
+        if (this.attackTimer <= 0 && this.state === 'attack') this.state = 'idle';
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x - game.camera.x, this.y - game.camera.y);
+        
+        // Эффект неуязвимости (мигание)
+        if (this.invulnerable > 0 && Math.floor(this.invulnerable / 4) % 2 === 0) {
+            ctx.globalAlpha = 0.5;
+        }
+
+        // Отрисовка персонажа (Пиксель-арт примитивами)
+        // Плащ
+        ctx.fillStyle = COLORS.cloak;
+        if (this.direction === 1) {
+            ctx.fillRect(2, 4, 8, 12); // Сзади
+        } else {
+            ctx.fillRect(2, 4, 8, 12);
+        }
+
+        // Тело (Белый жук)
+        ctx.fillStyle = COLORS.player;
+        // Голова
+        ctx.fillRect(4, 0, 4, 4);
+        // Уши
+        ctx.fillRect(3, -2, 2, 2);
+        ctx.fillRect(7, -2, 2, 2);
+        // Тело
+        ctx.fillRect(3, 4, 6, 8);
+        
+        // Ноги (Анимация бега)
+        if (this.state === 'run' || this.state === 'dash') {
+            let legOffset = this.animFrame % 2 === 0 ? 0 : 2;
+            ctx.fillRect(2, 12 + legOffset, 2, 2);
+            ctx.fillRect(8, 12 - legOffset, 2, 2);
+        } else {
+            ctx.fillRect(2, 12, 2, 2);
+            ctx.fillRect(8, 12, 2, 2);
+        }
+
+        // Оружие (Игла)
+        if (this.state === 'attack') {
+            ctx.fillStyle = '#fff';
+            let spikeLen = 10;
+            ctx.fillRect(this.direction > 0 ? 10 : -spikeLen, 6, spikeLen, 2);
+        } else if (this.state !== 'idle') {
+            ctx.fillStyle = '#555';
+            ctx.fillRect(this.direction > 0 ? 10 : -4, 6, 4, 2);
+        }
+
+        ctx.restore();
+    }
+
+    handleCollisionX() {
+        // Простая AABB коллизия с тайлами
+        let left = Math.floor(this.x / 8);
+        let right = Math.floor((this.x + this.w - 1) / 8);
+        let top = Math.floor(this.y / 8);
+        let bottom = Math.floor((this.y + this.h - 1) / 8);
+
+        for (let c = left; c <= right; c++) {
+            for (let r = top; r <= bottom; r++) {
+                if (level[r] && level[r][c] === 1) {
+                    if (this.vx > 0) this.x = c * 8 - this.w;
+                    if (this.vx < 0) this.x = (c + 1) * 8;
+                    this.vx = 0;
+                }
+            }
+        }
+    }
+
+    handleCollisionY() {
+        let left = Math.floor(this.x / 8);
+        let right = Math.floor((this.x + this.w - 1) / 8);
+        let top = Math.floor(this.y / 8);
+        let bottom = Math.floor((this.y + this.h - 1) / 8);
+
+        for (let c = left; c <= right; c++) {
+            for (let r = top; r <= bottom; r++) {
+                if (level[r] && level[r][c] === 1) {
+                    if (this.vy > 0) { 
+                        this.y = r * 8 - this.h; 
+                        this.vy = 0; 
+                        this.onGround = true; 
+                    }
+                    if (this.vy < 0) { 
+                        this.y = (r + 1) * 8; 
+                        this.vy = 0; 
+                    }
+                }
+                // Шипы
+                if (level[r] && level[r][c] === 2) {
+                    this.takeDamage(1);
+                }
+            }
+        }
+    }
+
+    takeDamage(dmg) {
+        if (this.invulnerable > 0) return;
+        this.hp -= dmg;
+        this.invulnerable = 60; // 1 сек неуязвимости
+        this.createHitParticles();
+        if (this.hp <= 0) {
+            this.hp = 0;
+            game.state = 'gameover';
+        }
+        updateUI();
+    }
+
+    addSoul(amount) {
+        this.soul += amount;
+        updateUI();
+    }
+
+    die() {
+        game.state = 'gameover';
+    }
+
+    createDashParticles() {
+        for(let i=0; i<5; i++) {
+            game.particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, -this.direction, 0, COLORS.player, 10));
+        }
+    }
+    
+    createSlash() {
+        // Хитбокс атаки
+        let hitbox = {
+            x: this.x + (this.direction > 0 ? this.w : -15),
+            y: this.y,
+            w: 15, h: this.h
+        };
+        
+        enemies.forEach(e => {
+            if (rectIntersect(hitbox, e)) {
+                e.hp--;
+                if (e.hp <= 0) {
+                    this.addSoul(10);
+                    // Удаление врага
+                    let index = enemies.indexOf(e);
+                    if (index > -1) enemies.splice(index, 1);
+                }
+            }
+        });
+        
+        // Визуал атаки (простой)
+        game.particles.push(new Particle(this.x + (this.direction > 0 ? this.w : 0), this.y + 8, this.direction * 3, 0, '#fff', 5));
+    }
+
+    createHitParticles() {
+        for(let i=0; i<10; i++) {
+            game.particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, (Math.random()-0.5)*4, (Math.random()-0.5)*4, '#ff4757', 20));
+        }
+    }
+}
+
+class Enemy {
+    constructor(x, y, type = 'basic') {
+        this.x = x; this.y = y;
+        this.w = 12; this.h = 12;
+        this.type = type;
+        this.hp = 1;
+        this.speed = 1;
+        this.state = 'idle'; // idle, chase
+        this.animFrame = 0;
+        this.dir = 1;
+        this.patrolDist = 50;
+        this.startX = x;
+    }
+
+    update() {
+        this.animFrame++;
+        
+        // Простой ИИ
+        let distToPlayer = Math.hypot(player.x - this.x, player.y - this.y);
+        
+        if (distToPlayer < 100) {
+            this.state = 'chase';
+            // Движение к игроку
+            if (player.x > this.x) this.x += this.speed;
+            else this.x -= this.speed;
+            
+            // Атака при касании
+            if (rectIntersect(this, player)) {
+                player.takeDamage(1);
+            }
+        } else {
+            this.state = 'idle';
+            // Патруль
+            this.x += this.speed * this.dir;
+            if (Math.abs(this.x - this.startX) > this.patrolDist) this.dir *= -1;
+        }
+
+        // Гравитация врага
+        this.y += 2; // Упрощенно, предполагаем платформы
+        // Тут нужна коллизия с полом для врагов, но для прототипа пропустим детали
+        if (this.y > HEIGHT - 20) this.y = HEIGHT - 20;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x - game.camera.x, this.y - game.camera.y);
+        
+        // Рисуем врага (Зеленый призрак/жук)
+        ctx.fillStyle = COLORS.enemy;
+        // Тело
+        ctx.fillRect(2, 2, 8, 8);
+        // Глаза
+        ctx.fillStyle = '#000';
+        ctx.fillRect(3, 4, 2, 2);
+        ctx.fillRect(7, 4, 2, 2);
+        
+        // Анимация покачивания
+        if (this.state === 'idle') {
+            ctx.translate(0, Math.sin(this.animFrame * 0.2) * 1);
+        }
+        
+        ctx.restore();
+    }
+}
+
+class Boss {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.w = 32; this.h = 32;
+        this.hp = 10;
+        this.maxHp = 10;
+        this.phase = 1;
+        this.attackTimer = 0;
+        this.animFrame = 0;
+    }
+
+    update() {
+        this.animFrame++;
+        this.attackTimer--;
+
+        // Логика босса
+        if (this.hp < this.maxHp / 2 && this.phase === 1) {
+            this.phase = 2;
+            // Эффект смены фазы
+            for(let i=0; i<30; i++) game.particles.push(new Particle(this.x, this.y, 0,0, COLORS.boss, 60));
+        }
+
+        // Атака иглой (снаряды)
+        if (this.attackTimer <= 0) {
+            this.shootSpike();
+            this.attackTimer = 60; // Атака раз в секунду
+        }
+
+        // Движение босса (медленное)
+        this.x += Math.sin(this.animFrame * 0.05) * 0.5;
+
+        // Коллизия с игроком
+        if (rectIntersect(this, player)) {
+            player.takeDamage(1);
+        }
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x - game.camera.x, this.y - game.camera.y);
+
+        // Огромное тело босса
+        ctx.fillStyle = COLORS.boss;
+        ctx.fillRect(0, 0, this.w, this.h);
+        
+        // Детали (глаза/рот)
+        ctx.fillStyle = '#000';
+        ctx.fillRect(8, 8, 16, 8); // Рот
+        ctx.fillRect(10, 12, 4, 4); // Глаз 1
+        ctx.fillRect(18, 12, 4, 4); // Глаз 2
+
+        // Полоска здоровья
+        ctx.fillStyle = '#555';
+        ctx.fillRect(-5, -10, this.w + 10, 4);
+        ctx.fillStyle = '#d63031';
+        ctx.fillRect(-5, -10, (this.w + 10) * (this.hp / this.maxHp), 4);
+
+        ctx.restore();
+    }
+
+    shootSpike() {
+        // Стреляет в сторону игрока
+        let angle = Math.atan2(player.y - this.y, player.x - this.x);
+        let spd = 3;
+        let s = new Spike(this.x + this.w/2, this.y + this.h/2, Math.cos(angle)*spd, Math.sin(angle)*spd);
+        spikes.push(s);
+    }
+
+    takeDamage(dmg) {
+        this.hp -= dmg;
+        if (this.hp <= 0) {
+            game.state = 'win';
+            player.addSoul(100);
+        }
+    }
+}
+
+class Spike {
+    constructor(x, y, vx, vy) {
+        this.x = x; this.y = y;
+        this.vx = vx; this.vy = vy;
+        this.w = 4; this.h = 4;
+        this.life = 120;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        
+        // Коллизия с игроком
+        if (rectIntersect(this, player)) {
+            player.takeDamage(1);
+            this.life = 0; // Исчезновение
+        }
+    }
+    draw() {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(this.x - game.camera.x, this.y - game.camera.y, this.w, this.h);
+    }
+}
+
+class Particle {
+    constructor(x, y, vx, vy, color, life) {
+        this.x = x; this.y = y;
+        this.vx = vx; this.vy = vy;
+        this.color = color;
+        this.life = life;
+        this.maxLife = life;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.1; // Гравитация частиц
+        this.life--;
+    }
+    draw() {
+        let alpha = this.life / this.maxLife;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - game.camera.x, this.y - game.camera.y, 2, 2);
+        ctx.globalAlpha = 1;
+    }
+}
+
+// --- УРОВЕНЬ (LEVEL DESIGN) ---
+// 0 = воздух, 1 = платформа, 2 = шипы, 3 = старт, 4 = дверь/босс
+const level = [
+    "                                        ",
+    "                                        ",
+    "                                        ",
+    "                                        ",
+    "                                        ",
+    "           111111                       ",
+    "                                        ",
+    "      1111      1111                    ",
+    "                                        ",
+    "  1111          2222     11111111       ",
+    "                     1111        1111   ",
+    "  3                               11    ",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "  11111111111111111111111111111111111111",
+    "4444444444444444444444444444444444444444",
+];
+
+// Парсинг уровня в массив чисел
+let parsedLevel = [];
+level.forEach(row => {
+    let r = [];
+    for (let char of row) {
+        if (char === ' ') r.push(0);
+        else r.push(parseInt(char));
+    }
+    parsedLevel.push(r);
+});
+
+// --- ИНИЦИАЛИЗАЦИЯ ---
+let player = new Player(50, 100);
+let enemies = [];
+let spikes = [];
+let boss = null;
+
+// Спавн врагов на основе карты
+parsedLevel.forEach((row, y) => {
+    row.forEach((cell, x) => {
+        if (cell === 2) { // Шипы (пассивные)
+            // Можно добавить логику урона, но пока просто декор
+        }
+        if (cell === 3) { // Старт игрока уже задан, но можно менять
+            player.x = x * 8;
+            player.y = y * 8;
+        }
+        if (cell === 4) { // Зона босса
+             boss = new Boss(x * 8, y * 8 - 32);
+        }
+    });
+});
+
+// Добавим пару врагов вручную для теста
+enemies.push(new Enemy(200, 150));
+enemies.push(new Enemy(100, 180));
+
+// --- ГЛАВНЫЙ ЦИКЛ ---
+
+function updateUI() {
+    let hearts = '';
+    for(let i=0; i<player.hp; i++) hearts += '♥';
+    for(let i=0; i<player.maxHp - player.hp; i++) hearts += '♡';
+    document.querySelector('.heart').innerText = hearts;
+    document.querySelector('.soul').innerText = player.soul;
+}
+
+function rectIntersect(r1, r2) {
+    return !(r2.x > r1.x + r1.w || 
+             r2.x + r2.w < r1.x || 
+             r2.y > r1.y + r1.h || 
+             r2.y + r2.h < r1.y);
+}
+
+function gameLoop() {
+    if (game.state === 'playing') {
+        // 1. Input
+        // (обрабатывается в классе Player)
+        
+        // 2. Update
+        player.update();
+        
+        // Камера следит за игроком (плавно)
+        let targetCamX = player.x - WIDTH/2;
+        game.camera.x += (targetCamX - game.camera.x) * 0.1;
+        if (game.camera.x < 0) game.camera.x = 0;
+        if (game.camera.x > WIDTH * 8 - WIDTH) game.camera.x = WIDTH * 8 - WIDTH;
+
+        enemies.forEach(e => e.update());
+        if (boss) boss.update();
+        
+        spikes.forEach(s => s.update());
+        spikes = spikes.filter(s => s.life > 0);
+
+        game.particles.forEach(p => p.update());
+        game.particles = game.particles.filter(p => p.life > 0);
+
+        // 3. Render
+        // Фон (Атмосфера)
+        ctx.fillStyle = COLORS.bg;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Рисуем уровень (Тайлы)
+        let startCol = Math.floor(game.camera.x / 8);
+        let endCol = startCol + (WIDTH / 8) + 1;
+        
+        for (let c = startCol; c < endCol; c++) {
+            for (let r = 0; r < parsedLevel.length; r++) {
+                let tile = parsedLevel[r][c];
+                if (tile === 1) { // Платформа
+                    ctx.fillStyle = COLORS.platform;
+                    ctx.fillRect(c * 8 - game.camera.x, r * 8, 8, 8);
+                    // Тень/объем
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(c * 8 - game.camera.x, r * 8 + 6, 8, 2);
+                }
+                if (tile === 2) { // Шипы
+                    ctx.fillStyle = COLORS.spike;
+                    ctx.fillRect(c * 8 - game.camera.x, r * 8, 8, 4);
+                    ctx.fillRect(c * 8 - game.camera.x + 2, r * 8 - 4, 4, 4);
+                }
+                if (tile === 4) { // Пол босса
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(c * 8 - game.camera.x, r * 8, 8, 8);
+                }
+            }
+        }
+
+        // Декор: Фонари (как на скриншоте)
+        drawLamps();
+
+        // Частицы
+        game.particles.forEach(p => p.draw());
+        
+        // Снаряды
+        spikes.forEach(s => s.draw());
+
+        // Враги
+        enemies.forEach(e => e.draw());
+        if (boss) boss.draw();
+
+        // Игрок
+        player.draw();
+
+        // Эффект дождя/тумана
+        drawAtmosphere();
+
+    } else if (game.state === 'gameover') {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0,0,canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = '20px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('THE VOID HAS CONSUMED YOU', WIDTH*SCALE/2, HEIGHT*SCALE/2);
+        ctx.font = '12px monospace';
+        ctx.fillText('Refresh to try again', WIDTH*SCALE/2, HEIGHT*SCALE/2 + 20);
+    } else if (game.state === 'win') {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0,0,canvas.width, canvas.height);
+        ctx.fillStyle = COLORS.boss;
+        ctx.font = '20px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('BOSS DEFEATED', WIDTH*SCALE/2, HEIGHT*SCALE/2);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px monospace';
+        ctx.fillText('You have ' + player.soul + ' Soul', WIDTH*SCALE/2, HEIGHT*SCALE/2 + 20);
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+function drawLamps() {
+    // Рисуем несколько источников света для атмосферы
+    let lamps = [
+        {x: 100, y: 120, r: 40},
+        {x: 250, y: 100, r: 50},
+        {x: 50, y: 180, r: 30}
+    ];
+
+    lamps.forEach(lamp => {
+        let screenX = lamp.x - game.camera.x;
+        let screenY = lamp.y;
+        
+        // Градиент света (очень упрощенно через прозрачность)
+        let grad = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, lamp.r);
+        grad.addColorStop(0, 'rgba(255, 234, 167, 0.1)');
+        grad.addColorStop(1, 'rgba(255, 234, 167, 0)');
+        
+        ctx.fillStyle = grad;
+        ctx.fillRect(screenX - lamp.r, screenY - lamp.r, lamp.r*2, lamp.r*2);
+
+        // Сам фонарь
+        ctx.fillStyle = COLORS.light;
+        ctx.fillRect(screenX - 2, screenY - 2, 4, 4);
+    });
+}
+
+function drawAtmosphere() {
+    // Эффект дождя/пыли
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    for(let i=0; i<50; i++) {
+        let x = Math.random() * canvas.width;
+        let y = (Math.random() * canvas.height + game.time) % canvas.height;
+        ctx.fillRect(x, y, 1, 4);
+    }
+    
+    // Виньетка
+    let grad = ctx.createRadialGradient(WIDTH*SCALE/2, HEIGHT*SCALE/2, HEIGHT/2, WIDTH*SCALE/2, HEIGHT*SCALE/2, HEIGHT);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.8)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,canvas.width, canvas.height);
+}
+
+// Input Handlers
+window.addEventListener('keydown', e => { game.keys[e.key] = true; });
+window.addEventListener('keyup', e => { game.keys[e.key] = false; });
+
+// Запуск
+updateUI();
+gameLoop();
+
+</script>
 </body>
 </html>
-
