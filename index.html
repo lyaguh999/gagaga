@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rhythmium Elite - Продвинутая ритм-игра</title>
+    <title>Rhythmium Elite+ - Ритм-игра с музыкой и слайдерами</title>
     <style>
         * {
             margin: 0;
@@ -180,6 +180,7 @@
             z-index: 1000;
             transform: translate(-50%, -50%);
             transition: transform 0.05s ease-out;
+            display: none; /* Сначала скрыт, показывается при движении мыши */
         }
         
         .cursor-outer {
@@ -282,8 +283,10 @@
         
         .controls {
             display: flex;
-            gap: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
             margin-top: 10px;
+            justify-content: center;
         }
         
         button {
@@ -314,6 +317,48 @@
         
         button#reset-btn {
             background: linear-gradient(to right, #4cc9f0, #4895ef);
+        }
+        
+        button#music-toggle {
+            background: linear-gradient(to right, #72efdd, #4cc9f0);
+        }
+        
+        .music-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            width: 100%;
+            justify-content: center;
+        }
+        
+        .music-info {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            text-align: center;
+        }
+        
+        .volume-slider {
+            width: 100px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        
+        .volume-slider:hover {
+            opacity: 1;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #4cc9f0;
+            cursor: pointer;
         }
         
         .instructions {
@@ -377,6 +422,58 @@
             color: #f72585;
         }
         
+        .slider-track {
+            position: absolute;
+            pointer-events: none;
+        }
+        
+        .slider-path {
+            stroke-width: 8;
+            stroke-linecap: round;
+            fill: none;
+        }
+        
+        .slider-ball {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            transition: all 0.1s ease-out;
+        }
+        
+        .slider-hit-effect {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            animation: sliderHitPulse 0.3s ease-out forwards;
+        }
+        
+        @keyframes sliderHitPulse {
+            0% { transform: scale(0.5); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        
+        .beat-indicator {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0;
+        }
+        
+        .beat-pulse {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(76, 201, 240, 0.3) 0%, rgba(76, 201, 240, 0) 70%);
+            transform: translate(-50%, -50%);
+            animation: beatPulse 0.5s ease-out forwards;
+        }
+        
+        @keyframes beatPulse {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+        }
+        
         footer {
             margin-top: 25px;
             opacity: 0.7;
@@ -397,14 +494,23 @@
             .stat-value {
                 font-size: 1.8rem;
             }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            button {
+                width: 200px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Rhythmium Elite</h1>
-            <div class="subtitle">Продвинутая ритм-игра с системой жизней и прогрессивной сложностью</div>
+            <h1>Rhythmium Elite+</h1>
+            <div class="subtitle">Ритм-игра с музыкой, слайдерами и фиксированным курсором</div>
         </div>
         
         <div class="game-stats">
@@ -436,29 +542,38 @@
         
         <div class="game-area">
             <canvas id="game-canvas"></canvas>
+            <div class="beat-indicator" id="beat-indicator"></div>
             <div class="game-status" id="game-status"></div>
             <!-- Кастомный курсор будет добавлен через JavaScript -->
+        </div>
+        
+        <div class="music-controls">
+            <div class="music-info">
+                <span id="music-status">Музыка: вкл</span> | Громкость:
+            </div>
+            <input type="range" min="0" max="100" value="70" class="volume-slider" id="volume-slider">
         </div>
         
         <div class="controls">
             <button id="start-btn">Начать игру</button>
             <button id="reset-btn">Сбросить игру</button>
+            <button id="music-toggle">Выкл музыку</button>
         </div>
         
         <div class="instructions">
             <h3>Как играть</h3>
             <ul>
-                <li>Кликайте по кругам, когда они совпадают с внешним кольцом</li>
-                <li>У вас есть 3 жизни - каждый пропущенный круг отнимает жизнь</li>
-                <li>Сложность увеличивается по мере вашего прогресса</li>
-                <li>Каждые 10 комбо восстанавливают 1 жизнь (макс. 3)</li>
-                <li>Нажмите <span class="key">Пробел</span> для паузы/продолжения игры</li>
-                <li>Игра заканчивается, когда у вас заканчиваются жизни</li>
+                <li><strong>Круги:</strong> кликайте по кругам, когда они совпадают с внешним кольцом</li>
+                <li><strong>Слайдеры:</strong> нажмите на начальный круг и проведите по линии, удерживая кнопку мыши</li>
+                <li><strong>Жизни:</strong> у вас есть 3 жизни, каждый пропуск отнимает жизнь</li>
+                <li><strong>Восстановление:</strong> каждые 10 комбо восстанавливают 1 жизнь (макс. 3)</li>
+                <li><strong>Сложность:</strong> увеличивается автоматически по мере игры</li>
+                <li><strong>Управление:</strong> <span class="key">Пробел</span> - пауза, <span class="key">R</span> - сброс, <span class="key">M</span> - музыка вкл/выкл</li>
             </ul>
         </div>
         
         <footer>
-            Rhythmium Elite © 2023 | Продвинутая ритм-игра с кастомным курсором
+            Rhythmium Elite+ © 2023 | Ритм-игра с фиксированным курсором и слайдерами
         </footer>
     </div>
 
@@ -474,7 +589,11 @@
         const difficultyLevel = document.getElementById('difficulty-level');
         const startButton = document.getElementById('start-btn');
         const resetButton = document.getElementById('reset-btn');
+        const musicToggleButton = document.getElementById('music-toggle');
+        const volumeSlider = document.getElementById('volume-slider');
+        const musicStatus = document.getElementById('music-status');
         const gameStatus = document.getElementById('game-status');
+        const beatIndicator = document.getElementById('beat-indicator');
         
         canvas.width = canvas.parentElement.clientWidth;
         canvas.height = canvas.parentElement.clientHeight;
@@ -485,7 +604,12 @@
         customCursor.innerHTML = '<div class="cursor-outer"></div><div class="cursor-inner"></div>';
         document.querySelector('.game-area').appendChild(customCursor);
         
-        // Обновление позиции курсора
+        // Флаг для отслеживания положения мыши
+        let mouseX = canvas.width / 2;
+        let mouseY = canvas.height / 2;
+        let isMouseDown = false;
+        
+        // Обновление позиции курсора без прыжков
         document.addEventListener('mousemove', (e) => {
             const gameArea = document.querySelector('.game-area');
             const rect = gameArea.getBoundingClientRect();
@@ -493,24 +617,215 @@
             // Проверяем, находится ли курсор внутри игровой области
             if (e.clientX >= rect.left && e.clientX <= rect.right && 
                 e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                customCursor.style.left = `${e.clientX - rect.left}px`;
-                customCursor.style.top = `${e.clientY - rect.top}px`;
                 customCursor.style.display = 'block';
+                
+                // Плавное обновление позиции курсора
+                const targetX = e.clientX - rect.left;
+                const targetY = e.clientY - rect.top;
+                
+                // Плавное движение курсора (lerp)
+                mouseX += (targetX - mouseX) * 0.3;
+                mouseY += (targetY - mouseY) * 0.3;
+                
+                customCursor.style.left = `${mouseX}px`;
+                customCursor.style.top = `${mouseY}px`;
             } else {
                 customCursor.style.display = 'none';
             }
         });
         
         // Анимация клика курсора
-        document.addEventListener('mousedown', () => {
-            customCursor.classList.add('cursor-click');
+        document.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Левая кнопка мыши
+                customCursor.classList.add('cursor-click');
+                isMouseDown = true;
+            }
         });
         
-        document.addEventListener('mouseup', () => {
-            setTimeout(() => {
-                customCursor.classList.remove('cursor-click');
-            }, 200);
+        document.addEventListener('mouseup', (e) => {
+            if (e.button === 0) { // Левая кнопка мыши
+                setTimeout(() => {
+                    customCursor.classList.remove('cursor-click');
+                }, 200);
+                isMouseDown = false;
+            }
         });
+        
+        // Аудио элементы
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let backgroundMusic = null;
+        let musicSource = null;
+        let musicAnalyser = null;
+        let musicDataArray = null;
+        let isMusicPlaying = false;
+        let musicVolume = 0.7;
+        
+        // Создание битовой музыки
+        function createBackgroundMusic() {
+            // Останавливаем предыдущую музыку, если она играет
+            if (musicSource) {
+                musicSource.stop();
+            }
+            
+            // Создаем источник звука
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            // Подключаем анализатор для визуализации
+            musicAnalyser = audioContext.createAnalyser();
+            musicAnalyser.fftSize = 256;
+            musicDataArray = new Uint8Array(musicAnalyser.frequencyBinCount);
+            
+            // Настройка звука
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(220, audioContext.currentTime); // Нота A3
+            
+            // Создаем эффект дисторшн для более насыщенного звука
+            const waveShaper = audioContext.createWaveShaper();
+            waveShaper.curve = makeDistortionCurve(400);
+            
+            // Подключаем все узлы
+            oscillator.connect(waveShaper);
+            waveShaper.connect(gainNode);
+            gainNode.connect(musicAnalyser);
+            musicAnalyser.connect(audioContext.destination);
+            
+            // Устанавливаем громкость
+            gainNode.gain.setValueAtTime(musicVolume, audioContext.currentTime);
+            
+            // Запускаем осциллятор
+            oscillator.start();
+            
+            // Создаем ритмический паттерн
+            let time = audioContext.currentTime;
+            
+            // Бас-линия (каждую долю)
+            for (let i = 0; i < 64; i++) {
+                // Основной бит на каждую долю
+                gainNode.gain.setValueAtTime(musicVolume * 0.8, time + i * 0.5);
+                gainNode.gain.setValueAtTime(musicVolume * 0.3, time + i * 0.5 + 0.05);
+                
+                // Акцент на каждую четвертую долю
+                if (i % 4 === 0) {
+                    oscillator.frequency.setValueAtTime(330, time + i * 0.5); // Нота E4
+                    gainNode.gain.setValueAtTime(musicVolume * 1.2, time + i * 0.5);
+                } else if (i % 2 === 0) {
+                    oscillator.frequency.setValueAtTime(277, time + i * 0.5); // Нота C#4
+                } else {
+                    oscillator.frequency.setValueAtTime(220, time + i * 0.5); // Нота A3
+                }
+                
+                // Мелодия на каждую 8-ю долю
+                if (i % 8 === 2) {
+                    oscillator.frequency.setValueAtTime(392, time + i * 0.5); // Нота G4
+                } else if (i % 8 === 4) {
+                    oscillator.frequency.setValueAtTime(440, time + i * 0.5); // Нота A4
+                } else if (i % 8 === 6) {
+                    oscillator.frequency.setValueAtTime(349, time + i * 0.5); // Нота F4
+                }
+            }
+            
+            // Останавливаем через 32 секунды (64 доли по 0.5 секунды)
+            oscillator.stop(time + 32);
+            
+            // Сохраняем источник для управления
+            musicSource = oscillator;
+            
+            // Запускаем визуализацию битов
+            startBeatVisualization();
+            
+            // Устанавливаем таймер для повторения музыки
+            setTimeout(() => {
+                if (isMusicPlaying) {
+                    createBackgroundMusic();
+                }
+            }, 32000);
+        }
+        
+        // Функция для создания кривой дисторшна
+        function makeDistortionCurve(amount) {
+            const k = typeof amount === 'number' ? amount : 50;
+            const n_samples = 44100;
+            const curve = new Float32Array(n_samples);
+            const deg = Math.PI / 180;
+            
+            for (let i = 0; i < n_samples; i++) {
+                const x = i * 2 / n_samples - 1;
+                curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
+            }
+            return curve;
+        }
+        
+        // Визуализация битов
+        function startBeatVisualization() {
+            if (!musicAnalyser || !isMusicPlaying) return;
+            
+            function drawBeat() {
+                if (!musicAnalyser || !isMusicPlaying) return;
+                
+                musicAnalyser.getByteFrequencyData(musicDataArray);
+                
+                // Вычисляем среднюю амплитуду
+                let sum = 0;
+                for (let i = 0; i < musicDataArray.length; i++) {
+                    sum += musicDataArray[i];
+                }
+                const average = sum / musicDataArray.length;
+                
+                // Если амплитуда выше порога, создаем пульсацию
+                if (average > 50) {
+                    createBeatPulse();
+                }
+                
+                requestAnimationFrame(drawBeat);
+            }
+            
+            drawBeat();
+        }
+        
+        // Создание пульсации бита
+        function createBeatPulse() {
+            const beatPulse = document.createElement('div');
+            beatPulse.className = 'beat-pulse';
+            
+            // Случайная позиция на экране
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            
+            beatPulse.style.left = `${x}px`;
+            beatPulse.style.top = `${y}px`;
+            beatPulse.style.width = `${50 + Math.random() * 100}px`;
+            beatPulse.style.height = beatPulse.style.width;
+            
+            beatIndicator.appendChild(beatPulse);
+            
+            setTimeout(() => {
+                if (beatIndicator.contains(beatPulse)) {
+                    beatIndicator.removeChild(beatPulse);
+                }
+            }, 500);
+        }
+        
+        // Включение/выключение музыки
+        function toggleMusic() {
+            isMusicPlaying = !isMusicPlaying;
+            
+            if (isMusicPlaying) {
+                // Возобновляем аудиоконтекст, если он был приостановлен
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+                createBackgroundMusic();
+                musicToggleButton.textContent = 'Выкл музыку';
+                musicStatus.textContent = 'Музыка: вкл';
+            } else {
+                if (musicSource) {
+                    musicSource.stop();
+                }
+                musicToggleButton.textContent = 'Вкл музыку';
+                musicStatus.textContent = 'Музыка: выкл';
+            }
+        }
         
         // Игровые переменные
         let game = {
@@ -524,10 +839,11 @@
             isPaused: false,
             gameOver: false,
             circles: [],
-            approachRate: 1.5, // Скорость приближения кругов
-            circleSize: 80, // Размер кругов
+            sliders: [],
+            approachRate: 1.5,
+            circleSize: 80,
             lastCircleTime: 0,
-            circleInterval: 800, // Интервал между появлениями кругов (мс)
+            circleInterval: 800,
             colors: [
                 {outer: '#4361ee', inner: '#3a0ca3'},
                 {outer: '#f72585', inner: '#b5179e'},
@@ -537,9 +853,12 @@
             ],
             lives: 3,
             maxLives: 3,
-            difficulty: 1, // Уровень сложности (1-5)
-            difficultyTimer: 0, // Таймер для увеличения сложности
-            comboForLife: 0 // Счетчик комбо для восстановления жизни
+            difficulty: 1,
+            difficultyTimer: 0,
+            comboForLife: 0,
+            activeSlider: null,
+            sliderProgress: 0,
+            sliderScore: 0
         };
         
         // Класс для кругов
@@ -547,7 +866,7 @@
             constructor(x, y, time, color, sizeMultiplier = 1) {
                 this.x = x;
                 this.y = y;
-                this.time = time; // Время, когда нужно нажать
+                this.time = time;
                 this.color = color;
                 this.radius = (game.circleSize / 2) * sizeMultiplier;
                 this.approachRadius = this.radius * 3;
@@ -557,10 +876,10 @@
                 this.hitTime = null;
                 this.id = Math.random().toString(36).substring(7);
                 this.sizeMultiplier = sizeMultiplier;
+                this.type = 'circle';
             }
             
             update(currentTime) {
-                // Уменьшаем радиус подхода
                 if (!this.hit) {
                     const timeDiff = this.time - currentTime;
                     if (timeDiff > 0) {
@@ -570,7 +889,6 @@
                     }
                 }
                 
-                // Если время прошло и круг не был нажат, считаем пропущенным
                 if (!this.hit && currentTime > this.time + 200) {
                     this.isActive = false;
                     return 'miss';
@@ -582,26 +900,22 @@
             draw(ctx) {
                 if (!this.isActive) return;
                 
-                // Рисуем внешний круг
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 ctx.fillStyle = this.color.outer;
                 ctx.fill();
                 
-                // Рисуем внутренний круг
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.radius * 0.7, 0, Math.PI * 2);
                 ctx.fillStyle = this.color.inner;
                 ctx.fill();
                 
-                // Рисуем круг приближения
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.approachRadius, 0, Math.PI * 2);
                 ctx.strokeStyle = this.color.outer;
                 ctx.lineWidth = 3;
                 ctx.stroke();
                 
-                // Рисуем номер (для визуального разнообразия)
                 ctx.fillStyle = 'white';
                 ctx.font = `${this.radius * 0.5}px Arial`;
                 ctx.textAlign = 'center';
@@ -620,7 +934,6 @@
                     this.hitTime = currentTime;
                     this.isActive = false;
                     
-                    // Определяем точность попадания
                     const timeDiff = Math.abs(currentTime - this.time);
                     
                     if (timeDiff < 100) {
@@ -636,6 +949,178 @@
             }
         }
         
+        // Класс для слайдеров
+        class Slider {
+            constructor(startX, startY, endX, endY, startTime, endTime, color) {
+                this.startX = startX;
+                this.startY = startY;
+                this.endX = endX;
+                this.endY = endY;
+                this.startTime = startTime;
+                this.endTime = endTime;
+                this.color = color;
+                this.radius = game.circleSize / 3;
+                this.isActive = true;
+                this.startHit = false;
+                this.endHit = false;
+                this.progress = 0;
+                this.id = Math.random().toString(36).substring(7);
+                this.type = 'slider';
+                this.ballX = startX;
+                this.ballY = startY;
+                
+                // Вычисляем контрольные точки для кривой Безье
+                const dx = endX - startX;
+                const dy = endY - startY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // Создаем изогнутую траекторию
+                this.controlX1 = startX + dx * 0.3 + dy * 0.2;
+                this.controlY1 = startY + dy * 0.3 - dx * 0.2;
+                this.controlX2 = startX + dx * 0.7 - dy * 0.2;
+                this.controlY2 = startY + dy * 0.7 + dx * 0.2;
+            }
+            
+            update(currentTime) {
+                if (!this.isActive) return null;
+                
+                // Проверяем, не пропущен ли начальный круг
+                if (!this.startHit && currentTime > this.startTime + 200) {
+                    this.isActive = false;
+                    return 'miss';
+                }
+                
+                // Проверяем, не пропущен ли конечный круг
+                if (this.startHit && !this.endHit && currentTime > this.endTime + 200) {
+                    this.isActive = false;
+                    return 'miss';
+                }
+                
+                // Обновляем позицию шарика, если слайдер активен
+                if (this.startHit && !this.endHit) {
+                    const timeProgress = Math.max(0, Math.min(1, (currentTime - this.startTime) / (this.endTime - this.startTime)));
+                    this.progress = timeProgress;
+                    
+                    // Вычисляем позицию на кривой Безье
+                    this.ballX = this.calculateBezierPoint(timeProgress, this.startX, this.controlX1, this.controlX2, this.endX);
+                    this.ballY = this.calculateBezierPoint(timeProgress, this.startY, this.controlY1, this.controlY2, this.endY);
+                    
+                    // Проверяем, достигли ли конца слайдера
+                    if (timeProgress >= 1) {
+                        this.endHit = true;
+                        this.isActive = false;
+                        return 'slider_end';
+                    }
+                }
+                
+                return null;
+            }
+            
+            calculateBezierPoint(t, p0, p1, p2, p3) {
+                const u = 1 - t;
+                const tt = t * t;
+                const uu = u * u;
+                const uuu = uu * u;
+                const ttt = tt * t;
+                
+                const p = uuu * p0;
+                const q = 3 * uu * t * p1;
+                const r = 3 * u * tt * p2;
+                const s = ttt * p3;
+                
+                return p + q + r + s;
+            }
+            
+            draw(ctx) {
+                if (!this.isActive) return;
+                
+                // Рисуем начальный круг
+                ctx.beginPath();
+                ctx.arc(this.startX, this.startY, this.radius * 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = this.startHit ? this.color.inner : this.color.outer;
+                ctx.fill();
+                
+                // Рисуем конечный круг
+                ctx.beginPath();
+                ctx.arc(this.endX, this.endY, this.radius * 1.2, 0, Math.PI * 2);
+                ctx.fillStyle = this.endHit ? this.color.inner : this.color.outer;
+                ctx.fill();
+                
+                // Рисуем кривую Безье (траекторию слайдера)
+                ctx.beginPath();
+                ctx.moveTo(this.startX, this.startY);
+                ctx.bezierCurveTo(
+                    this.controlX1, this.controlY1,
+                    this.controlX2, this.controlY2,
+                    this.endX, this.endY
+                );
+                ctx.strokeStyle = this.color.outer;
+                ctx.lineWidth = 8;
+                ctx.stroke();
+                
+                // Рисуем внутреннюю линию траектории
+                ctx.beginPath();
+                ctx.moveTo(this.startX, this.startY);
+                ctx.bezierCurveTo(
+                    this.controlX1, this.controlY1,
+                    this.controlX2, this.controlY2,
+                    this.endX, this.endY
+                );
+                ctx.strokeStyle = this.color.inner;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                
+                // Рисуем шарик, если слайдер начат
+                if (this.startHit && !this.endHit) {
+                    ctx.beginPath();
+                    ctx.arc(this.ballX, this.ballY, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.arc(this.ballX, this.ballY, this.radius * 0.7, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color.outer;
+                    ctx.fill();
+                }
+            }
+            
+            checkStartHit(x, y, currentTime) {
+                if (this.startHit || !this.isActive) return null;
+                
+                const distance = Math.sqrt((x - this.startX) ** 2 + (y - this.startY) ** 2);
+                const timeDiff = Math.abs(currentTime - this.startTime);
+                
+                if (distance <= this.radius * 1.5 && timeDiff < 200) {
+                    this.startHit = true;
+                    
+                    if (timeDiff < 100) {
+                        return 'perfect';
+                    } else if (timeDiff < 200) {
+                        return 'good';
+                    } else {
+                        return 'late';
+                    }
+                }
+                
+                return null;
+            }
+            
+            checkSliderProgress(x, y) {
+                if (!this.startHit || this.endHit || !this.isActive) return false;
+                
+                // Проверяем, находится ли курсор рядом с шариком
+                const distance = Math.sqrt((x - this.ballX) ** 2 + (y - this.ballY) ** 2);
+                
+                if (distance <= this.radius * 2) {
+                    // Начисляем очки за удержание на траектории
+                    game.sliderScore += 2;
+                    return true;
+                }
+                
+                return false;
+            }
+        }
+        
         // Инициализация игры
         function initGame() {
             game.score = 0;
@@ -648,6 +1133,7 @@
             game.isPaused = false;
             game.gameOver = false;
             game.circles = [];
+            game.sliders = [];
             game.lastCircleTime = 0;
             game.lives = game.maxLives;
             game.difficulty = 1;
@@ -656,6 +1142,9 @@
             game.approachRate = 1.5;
             game.circleInterval = 800;
             game.circleSize = 80;
+            game.activeSlider = null;
+            game.sliderProgress = 0;
+            game.sliderScore = 0;
             
             scoreElement.textContent = '0';
             comboElement.textContent = '0';
@@ -686,7 +1175,6 @@
             const difficultyPercent = Math.min(100, (game.difficulty / 5) * 100);
             difficultyProgress.style.width = `${difficultyPercent}%`;
             
-            // Определяем уровень сложности по тексту
             let levelText = '';
             let color = '';
             
@@ -713,7 +1201,6 @@
         
         // Увеличение сложности
         function increaseDifficulty() {
-            // Увеличиваем сложность каждые 30 секунд или за каждый 1000 очков
             const timeBasedIncrease = performance.now() - game.difficultyTimer > 30000;
             const scoreBasedIncrease = game.score > 0 && game.score % 1000 === 0;
             
@@ -721,21 +1208,42 @@
                 game.difficulty += 0.5;
                 game.difficultyTimer = performance.now();
                 
-                // Увеличиваем скорость приближения
                 game.approachRate = 1.5 + (game.difficulty * 0.3);
-                
-                // Уменьшаем интервал между кругами
                 game.circleInterval = Math.max(300, 800 - (game.difficulty * 100));
                 
-                // Уменьшаем размер кругов на высоких уровнях сложности
                 if (game.difficulty > 3) {
                     game.circleSize = 80 - ((game.difficulty - 3) * 10);
                 }
                 
                 updateDifficultyDisplay();
                 
-                // Показываем уведомление о повышении сложности
                 showHitFeedback(`Уровень сложности: ${difficultyLevel.textContent}`, 'perfect');
+            }
+        }
+        
+        // Создание нового круга или слайдера
+        function createObject() {
+            const margin = game.circleSize;
+            const x = margin + Math.random() * (canvas.width - margin * 2);
+            const y = margin + Math.random() * (canvas.height - margin * 2);
+            
+            const time = performance.now() + 1500;
+            const color = game.colors[Math.floor(Math.random() * game.colors.length)];
+            
+            // Создаем слайдер с вероятностью 30% на высоких уровнях сложности
+            if (game.difficulty > 2 && Math.random() > 0.7) {
+                const endX = margin + Math.random() * (canvas.width - margin * 2);
+                const endY = margin + Math.random() * (canvas.height - margin * 2);
+                const endTime = time + 1000 + Math.random() * 1000; // Слайдер длится 1-2 секунды
+                
+                game.sliders.push(new Slider(x, y, endX, endY, time, endTime, color));
+            } else {
+                let sizeMultiplier = 1;
+                if (game.difficulty > 3 && Math.random() > 0.7) {
+                    sizeMultiplier = 0.7;
+                }
+                
+                game.circles.push(new HitCircle(x, y, time, color, sizeMultiplier));
             }
         }
         
@@ -790,47 +1298,41 @@
             // Увеличиваем сложность
             increaseDifficulty();
             
-            // Создаем новые круги
+            // Создаем новые объекты
             if (currentTime - game.lastCircleTime > game.circleInterval) {
-                createCircle();
+                createObject();
                 game.lastCircleTime = currentTime;
                 
-                // Дополнительные круги на высоких уровнях сложности
+                // Дополнительные объекты на высоких уровнях сложности
                 if (game.difficulty > 3 && Math.random() > 0.7) {
-                    setTimeout(() => createCircle(), 150);
+                    setTimeout(() => createObject(), 150);
                 }
             }
             
-            // Обновляем и рисуем круги
-            updateCircles(currentTime);
+            // Обновляем и рисуем объекты
+            updateObjects(currentTime);
             draw();
+            
+            // Обновляем активный слайдер
+            if (game.activeSlider && isMouseDown) {
+                const slider = game.sliders.find(s => s.id === game.activeSlider);
+                if (slider && slider.checkSliderProgress(mouseX, mouseY)) {
+                    game.sliderProgress++;
+                    
+                    // Начисляем очки за удержание на слайдере
+                    if (game.sliderProgress % 10 === 0) {
+                        game.score += 10;
+                        scoreElement.textContent = game.score;
+                    }
+                }
+            }
             
             requestAnimationFrame(gameLoop);
         }
         
-        // Создание нового круга
-        function createCircle() {
-            const margin = game.circleSize;
-            const x = margin + Math.random() * (canvas.width - margin * 2);
-            const y = margin + Math.random() * (canvas.height - margin * 2);
-            
-            // Время появления круга (текущее время + время на подход)
-            const time = performance.now() + 1500;
-            
-            // Выбираем случайный цвет
-            const color = game.colors[Math.floor(Math.random() * game.colors.length)];
-            
-            // На высоких уровнях сложности иногда создаем меньшие круги
-            let sizeMultiplier = 1;
-            if (game.difficulty > 3 && Math.random() > 0.7) {
-                sizeMultiplier = 0.7;
-            }
-            
-            game.circles.push(new HitCircle(x, y, time, color, sizeMultiplier));
-        }
-        
-        // Обновление всех кругов
-        function updateCircles(currentTime) {
+        // Обновление всех объектов
+        function updateObjects(currentTime) {
+            // Обновляем круги
             for (let i = game.circles.length - 1; i >= 0; i--) {
                 const circle = game.circles[i];
                 const result = circle.update(currentTime);
@@ -842,68 +1344,96 @@
                     game.circles.splice(i, 1);
                 }
             }
+            
+            // Обновляем слайдеры
+            for (let i = game.sliders.length - 1; i >= 0; i--) {
+                const slider = game.sliders[i];
+                const result = slider.update(currentTime);
+                
+                if (result === 'miss') {
+                    handleMiss();
+                    game.sliders.splice(i, 1);
+                    if (game.activeSlider === slider.id) {
+                        game.activeSlider = null;
+                    }
+                } else if (result === 'slider_end') {
+                    // Успешное завершение слайдера
+                    handleSliderComplete(slider);
+                    game.sliders.splice(i, 1);
+                    if (game.activeSlider === slider.id) {
+                        game.activeSlider = null;
+                    }
+                } else if (!slider.isActive) {
+                    game.sliders.splice(i, 1);
+                    if (game.activeSlider === slider.id) {
+                        game.activeSlider = null;
+                    }
+                }
+            }
         }
         
         // Обработка попадания
-        function handleHit(circle, hitType) {
-            // Добавляем очки в зависимости от точности
+        function handleHit(object, hitType, isSliderStart = false) {
             let points = 0;
             let popupText = '';
             
             switch(hitType) {
                 case 'perfect':
-                    points = 300;
+                    points = isSliderStart ? 200 : 300;
                     popupText = 'ИДЕАЛЬНО!';
                     break;
                 case 'good':
-                    points = 100;
+                    points = isSliderStart ? 100 : 100;
                     popupText = 'ХОРОШО';
                     break;
                 case 'late':
-                    points = 50;
+                    points = isSliderStart ? 50 : 50;
                     popupText = 'ПОЗДНО';
                     break;
             }
             
-            // Бонус за комбо
             points += Math.floor(game.combo / 10) * 10;
-            
-            // Множитель за сложность
             points = Math.floor(points * (1 + (game.difficulty * 0.2)));
             
-            // Обновляем счет
             game.score += points;
             game.hits++;
             game.totalHits++;
             game.combo++;
             game.comboForLife++;
             
-            // Восстанавливаем жизнь каждые 10 комбо
             if (game.comboForLife >= 10 && game.lives < game.maxLives) {
                 game.lives++;
                 game.comboForLife = 0;
                 updateLivesDisplay();
-                createLifeRestoreEffect(circle.x, circle.y);
+                createLifeRestoreEffect(object.x || object.startX, object.y || object.startY);
             }
             
-            // Рассчитываем точность
             game.accuracy = ((game.hits / game.totalHits) * 100).toFixed(1);
             
-            // Обновляем UI
             scoreElement.textContent = game.score;
             comboElement.textContent = game.combo;
             accuracyElement.textContent = `${game.accuracy}%`;
             
-            // Создаем эффект попадания
-            createHitEffect(circle.x, circle.y, circle.color.outer);
+            createHitEffect(object.x || object.startX, object.y || object.startY, object.color.outer);
             
-            // Создаем всплывающий текст комбо
-            if (game.combo > 5) {
-                createComboPopup(circle.x, circle.y - 50, `${game.combo} COMBO!`);
+            if (game.combo > 5 && !isSliderStart) {
+                createComboPopup(object.x || object.startX, (object.y || object.startY) - 50, `${game.combo} COMBO!`);
             }
             
-            // Показываем текст точности
             showHitFeedback(popupText, hitType);
+        }
+        
+        // Обработка завершения слайдера
+        function handleSliderComplete(slider) {
+            // Бонус за успешное завершение слайдера
+            const sliderBonus = 500 + game.sliderScore;
+            game.score += sliderBonus;
+            game.sliderScore = 0;
+            
+            scoreElement.textContent = game.score;
+            
+            createHitEffect(slider.endX, slider.endY, slider.color.outer);
+            showHitFeedback('СЛАЙДЕР!', 'perfect');
         }
         
         // Создание эффекта восстановления жизни
@@ -930,21 +1460,19 @@
             game.combo = 0;
             game.comboForLife = 0;
             game.lives--;
+            game.activeSlider = null;
+            game.sliderProgress = 0;
+            game.sliderScore = 0;
             
-            // Обновляем отображение жизней
             updateLivesDisplay();
             
-            // Рассчитываем точность
             game.accuracy = ((game.hits / game.totalHits) * 100).toFixed(1);
             
-            // Обновляем UI
             comboElement.textContent = '0';
             accuracyElement.textContent = `${game.accuracy}%`;
             
-            // Показываем текст промаха
             showHitFeedback('ПРОПУЩЕНО!', 'miss');
             
-            // Проверяем окончание игры
             if (game.lives <= 0) {
                 endGame();
             }
@@ -975,7 +1503,6 @@
             popup.style.left = `${x}px`;
             popup.style.top = `${y}px`;
             
-            // Цвет в зависимости от комбо
             if (game.combo >= 30) {
                 popup.style.color = '#ff0000';
             } else if (game.combo >= 20) {
@@ -1011,20 +1538,19 @@
             
             startButton.textContent = 'Новая игра';
             
-            // Определяем оценку в зависимости от счета
             let grade = '';
             let gradeColor = '';
             
-            if (game.score > 5000) {
+            if (game.score > 10000) {
                 grade = 'SS';
                 gradeColor = '#ffd700';
-            } else if (game.score > 3000) {
+            } else if (game.score > 7000) {
                 grade = 'S';
                 gradeColor = '#ff6b6b';
-            } else if (game.score > 1500) {
+            } else if (game.score > 4000) {
                 grade = 'A';
                 gradeColor = '#4cc9f0';
-            } else if (game.score > 800) {
+            } else if (game.score > 2000) {
                 grade = 'B';
                 gradeColor = '#72efdd';
             } else {
@@ -1039,24 +1565,23 @@
         
         // Отрисовка игры
         function draw() {
-            // Очищаем холст
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Рисуем фон с сеткой
             drawBackground();
             
-            // Рисуем все активные круги
+            game.sliders.forEach(slider => {
+                slider.draw(ctx);
+            });
+            
             game.circles.forEach(circle => {
                 circle.draw(ctx);
             });
             
-            // Рисуем индикатор сложности на холсте
             drawDifficultyIndicator();
         }
         
         // Отрисовка фона с сеткой
         function drawBackground() {
-            // Градиентный фон
             const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
             gradient.addColorStop(0, 'rgba(10, 10, 20, 0.8)');
             gradient.addColorStop(1, 'rgba(26, 26, 46, 0.8)');
@@ -1064,7 +1589,6 @@
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Сетка
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
             ctx.lineWidth = 1;
             
@@ -1083,7 +1607,6 @@
                 ctx.stroke();
             }
             
-            // Центральный круг
             ctx.beginPath();
             ctx.arc(canvas.width / 2, canvas.height / 2, 100, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
@@ -1093,7 +1616,6 @@
         
         // Отрисовка индикатора сложности на холсте
         function drawDifficultyIndicator() {
-            // Показываем текущий уровень сложности в углу
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(canvas.width - 150, 10, 140, 40);
             
@@ -1107,25 +1629,39 @@
         canvas.addEventListener('click', (e) => {
             if (!game.isPlaying || game.isPaused || game.gameOver) return;
             
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
             const currentTime = performance.now();
+            let hitDetected = false;
             
             // Проверяем попадание по кругам
             for (let i = game.circles.length - 1; i >= 0; i--) {
                 const circle = game.circles[i];
-                const hitType = circle.checkHit(x, y, currentTime);
+                const hitType = circle.checkHit(mouseX, mouseY, currentTime);
                 
                 if (hitType) {
                     handleHit(circle, hitType);
                     game.circles.splice(i, 1);
-                    return;
+                    hitDetected = true;
+                    break;
                 }
             }
             
-            // Если клик был не по кругу, сбрасываем комбо
-            if (game.combo > 0) {
+            // Проверяем попадание по началу слайдеров
+            if (!hitDetected) {
+                for (let i = game.sliders.length - 1; i >= 0; i--) {
+                    const slider = game.sliders[i];
+                    const hitType = slider.checkStartHit(mouseX, mouseY, currentTime);
+                    
+                    if (hitType) {
+                        handleHit(slider, hitType, true);
+                        game.activeSlider = slider.id;
+                        hitDetected = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Если клик был не по объекту, сбрасываем комбо
+            if (!hitDetected && game.combo > 0) {
                 game.combo = 0;
                 game.comboForLife = 0;
                 comboElement.textContent = '0';
@@ -1154,6 +1690,21 @@
                 e.preventDefault();
                 initGame();
             }
+            
+            // M для включения/выключения музыки
+            if (e.code === 'KeyM') {
+                e.preventDefault();
+                toggleMusic();
+            }
+        });
+        
+        // Обработка изменения громкости
+        volumeSlider.addEventListener('input', (e) => {
+            musicVolume = e.target.value / 100;
+            
+            if (musicSource && musicSource.gain) {
+                musicSource.gain.setValueAtTime(musicVolume, audioContext.currentTime);
+            }
         });
         
         // Обработка кнопок
@@ -1167,6 +1718,8 @@
         
         resetButton.addEventListener('click', initGame);
         
+        musicToggleButton.addEventListener('click', toggleMusic);
+        
         // Адаптация размера холста при изменении размера окна
         window.addEventListener('resize', () => {
             canvas.width = canvas.parentElement.clientWidth;
@@ -1178,6 +1731,9 @@
         window.addEventListener('load', () => {
             initGame();
             draw();
+            
+            // Автоматически включаем музыку при загрузке
+            toggleMusic();
         });
     </script>
 </body>
