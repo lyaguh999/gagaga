@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rhythmium - Стильная ритм-игра</title>
+    <title>Rhythmium Elite - Продвинутая ритм-игра</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            cursor: none;
         }
         
         body {
@@ -95,6 +96,64 @@
             letter-spacing: 1px;
         }
         
+        .lives-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        
+        .life-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+        
+        .life-full {
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+            box-shadow: 0 0 10px rgba(255, 65, 108, 0.5);
+        }
+        
+        .life-lost {
+            background: linear-gradient(135deg, #333, #555);
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+        
+        .difficulty-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: 15px;
+            padding: 8px 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+        }
+        
+        .difficulty-level {
+            font-weight: bold;
+            color: #4cc9f0;
+        }
+        
+        .difficulty-bar {
+            flex-grow: 1;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin: 0 15px;
+            overflow: hidden;
+        }
+        
+        .difficulty-progress {
+            height: 100%;
+            background: linear-gradient(to right, #72efdd, #4cc9f0);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        
         .game-area {
             position: relative;
             width: 800px;
@@ -112,10 +171,59 @@
             height: 100%;
         }
         
+        /* Кастомный курсор */
+        .custom-cursor {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+            z-index: 1000;
+            transform: translate(-50%, -50%);
+            transition: transform 0.05s ease-out;
+        }
+        
+        .cursor-outer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 2px solid #4cc9f0;
+            box-shadow: 0 0 10px rgba(76, 201, 240, 0.7);
+            animation: cursorPulse 2s infinite;
+        }
+        
+        .cursor-inner {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ffffff;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 5px #ffffff;
+        }
+        
+        .cursor-click {
+            animation: cursorClick 0.2s ease-out;
+        }
+        
+        @keyframes cursorPulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        @keyframes cursorClick {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.8); }
+            100% { transform: scale(1); }
+        }
+        
         .hit-circle {
             position: absolute;
             border-radius: 50%;
-            cursor: pointer;
+            cursor: none;
             transition: transform 0.1s ease;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
         }
@@ -295,8 +403,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Rhythmium</h1>
-            <div class="subtitle">Стильная ритм-игра в духе OSU</div>
+            <h1>Rhythmium Elite</h1>
+            <div class="subtitle">Продвинутая ритм-игра с системой жизней и прогрессивной сложностью</div>
         </div>
         
         <div class="game-stats">
@@ -314,9 +422,22 @@
             </div>
         </div>
         
+        <div class="lives-container" id="lives-container">
+            <!-- Жизни будут добавлены через JavaScript -->
+        </div>
+        
+        <div class="difficulty-indicator">
+            <span>Сложность:</span>
+            <div class="difficulty-bar">
+                <div class="difficulty-progress" id="difficulty-progress"></div>
+            </div>
+            <span class="difficulty-level" id="difficulty-level">Нормальная</span>
+        </div>
+        
         <div class="game-area">
             <canvas id="game-canvas"></canvas>
             <div class="game-status" id="game-status"></div>
+            <!-- Кастомный курсор будет добавлен через JavaScript -->
         </div>
         
         <div class="controls">
@@ -328,15 +449,16 @@
             <h3>Как играть</h3>
             <ul>
                 <li>Кликайте по кругам, когда они совпадают с внешним кольцом</li>
+                <li>У вас есть 3 жизни - каждый пропущенный круг отнимает жизнь</li>
+                <li>Сложность увеличивается по мере вашего прогресса</li>
+                <li>Каждые 10 комбо восстанавливают 1 жизнь (макс. 3)</li>
                 <li>Нажмите <span class="key">Пробел</span> для паузы/продолжения игры</li>
-                <li>Старайтесь держать комбо для большего счета</li>
-                <li>Точность кликов влияет на количество очков</li>
-                <li>Игра заканчивается, когда вы пропускаете 10 кругов</li>
+                <li>Игра заканчивается, когда у вас заканчиваются жизни</li>
             </ul>
         </div>
         
         <footer>
-            Rhythmium © 2023 | Создано в стиле OSU с элегантным дизайном
+            Rhythmium Elite © 2023 | Продвинутая ритм-игра с кастомным курсором
         </footer>
     </div>
 
@@ -347,12 +469,48 @@
         const scoreElement = document.getElementById('score');
         const comboElement = document.getElementById('combo');
         const accuracyElement = document.getElementById('accuracy');
+        const livesContainer = document.getElementById('lives-container');
+        const difficultyProgress = document.getElementById('difficulty-progress');
+        const difficultyLevel = document.getElementById('difficulty-level');
         const startButton = document.getElementById('start-btn');
         const resetButton = document.getElementById('reset-btn');
         const gameStatus = document.getElementById('game-status');
         
         canvas.width = canvas.parentElement.clientWidth;
         canvas.height = canvas.parentElement.clientHeight;
+        
+        // Создание кастомного курсора
+        const customCursor = document.createElement('div');
+        customCursor.className = 'custom-cursor';
+        customCursor.innerHTML = '<div class="cursor-outer"></div><div class="cursor-inner"></div>';
+        document.querySelector('.game-area').appendChild(customCursor);
+        
+        // Обновление позиции курсора
+        document.addEventListener('mousemove', (e) => {
+            const gameArea = document.querySelector('.game-area');
+            const rect = gameArea.getBoundingClientRect();
+            
+            // Проверяем, находится ли курсор внутри игровой области
+            if (e.clientX >= rect.left && e.clientX <= rect.right && 
+                e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                customCursor.style.left = `${e.clientX - rect.left}px`;
+                customCursor.style.top = `${e.clientY - rect.top}px`;
+                customCursor.style.display = 'block';
+            } else {
+                customCursor.style.display = 'none';
+            }
+        });
+        
+        // Анимация клика курсора
+        document.addEventListener('mousedown', () => {
+            customCursor.classList.add('cursor-click');
+        });
+        
+        document.addEventListener('mouseup', () => {
+            setTimeout(() => {
+                customCursor.classList.remove('cursor-click');
+            }, 200);
+        });
         
         // Игровые переменные
         let game = {
@@ -377,24 +535,28 @@
                 {outer: '#72efdd', inner: '#4cc9f0'},
                 {outer: '#560bad', inner: '#480ca8'}
             ],
-            maxMisses: 10,
-            missCount: 0
+            lives: 3,
+            maxLives: 3,
+            difficulty: 1, // Уровень сложности (1-5)
+            difficultyTimer: 0, // Таймер для увеличения сложности
+            comboForLife: 0 // Счетчик комбо для восстановления жизни
         };
         
         // Класс для кругов
         class HitCircle {
-            constructor(x, y, time, color) {
+            constructor(x, y, time, color, sizeMultiplier = 1) {
                 this.x = x;
                 this.y = y;
                 this.time = time; // Время, когда нужно нажать
                 this.color = color;
-                this.radius = game.circleSize / 2;
+                this.radius = (game.circleSize / 2) * sizeMultiplier;
                 this.approachRadius = this.radius * 3;
                 this.approachSpeed = game.approachRate;
                 this.isActive = true;
                 this.hit = false;
                 this.hitTime = null;
                 this.id = Math.random().toString(36).substring(7);
+                this.sizeMultiplier = sizeMultiplier;
             }
             
             update(currentTime) {
@@ -487,16 +649,94 @@
             game.gameOver = false;
             game.circles = [];
             game.lastCircleTime = 0;
-            game.missCount = 0;
+            game.lives = game.maxLives;
+            game.difficulty = 1;
+            game.difficultyTimer = 0;
+            game.comboForLife = 0;
+            game.approachRate = 1.5;
+            game.circleInterval = 800;
+            game.circleSize = 80;
             
             scoreElement.textContent = '0';
             comboElement.textContent = '0';
             accuracyElement.textContent = '100%';
             
+            updateLivesDisplay();
+            updateDifficultyDisplay();
+            
             gameStatus.textContent = '';
             gameStatus.style.opacity = '0';
             
             draw();
+        }
+        
+        // Обновление отображения жизней
+        function updateLivesDisplay() {
+            livesContainer.innerHTML = '';
+            
+            for (let i = 0; i < game.maxLives; i++) {
+                const lifeIcon = document.createElement('div');
+                lifeIcon.className = `life-icon ${i < game.lives ? 'life-full' : 'life-lost'}`;
+                livesContainer.appendChild(lifeIcon);
+            }
+        }
+        
+        // Обновление отображения сложности
+        function updateDifficultyDisplay() {
+            const difficultyPercent = Math.min(100, (game.difficulty / 5) * 100);
+            difficultyProgress.style.width = `${difficultyPercent}%`;
+            
+            // Определяем уровень сложности по тексту
+            let levelText = '';
+            let color = '';
+            
+            if (game.difficulty < 1.5) {
+                levelText = 'Легкая';
+                color = '#72efdd';
+            } else if (game.difficulty < 2.5) {
+                levelText = 'Нормальная';
+                color = '#4cc9f0';
+            } else if (game.difficulty < 3.5) {
+                levelText = 'Сложная';
+                color = '#4361ee';
+            } else if (game.difficulty < 4.5) {
+                levelText = 'Эксперт';
+                color = '#f72585';
+            } else {
+                levelText = 'МАСТЕР';
+                color = '#ff0000';
+            }
+            
+            difficultyLevel.textContent = levelText;
+            difficultyLevel.style.color = color;
+        }
+        
+        // Увеличение сложности
+        function increaseDifficulty() {
+            // Увеличиваем сложность каждые 30 секунд или за каждый 1000 очков
+            const timeBasedIncrease = performance.now() - game.difficultyTimer > 30000;
+            const scoreBasedIncrease = game.score > 0 && game.score % 1000 === 0;
+            
+            if ((timeBasedIncrease || scoreBasedIncrease) && game.difficulty < 5) {
+                game.difficulty += 0.5;
+                game.difficultyTimer = performance.now();
+                
+                // Увеличиваем скорость приближения
+                game.approachRate = 1.5 + (game.difficulty * 0.3);
+                
+                // Уменьшаем интервал между кругами
+                game.circleInterval = Math.max(300, 800 - (game.difficulty * 100));
+                
+                // Уменьшаем размер кругов на высоких уровнях сложности
+                if (game.difficulty > 3) {
+                    game.circleSize = 80 - ((game.difficulty - 3) * 10);
+                }
+                
+                updateDifficultyDisplay();
+                
+                // Показываем уведомление о повышении сложности
+                showHitFeedback(`Уровень сложности: ${difficultyLevel.textContent}`, 'perfect');
+            }
         }
         
         // Начало игры
@@ -508,6 +748,7 @@
             game.isPlaying = true;
             game.isPaused = false;
             game.lastCircleTime = performance.now();
+            game.difficultyTimer = performance.now();
             
             startButton.textContent = 'Пауза';
             gameStatus.textContent = 'Игра началась!';
@@ -546,13 +787,18 @@
             const deltaTime = currentTime - lastTime;
             lastTime = currentTime;
             
+            // Увеличиваем сложность
+            increaseDifficulty();
+            
             // Создаем новые круги
             if (currentTime - game.lastCircleTime > game.circleInterval) {
                 createCircle();
                 game.lastCircleTime = currentTime;
                 
-                // Уменьшаем интервал со временем для увеличения сложности
-                game.circleInterval = Math.max(300, game.circleInterval * 0.995);
+                // Дополнительные круги на высоких уровнях сложности
+                if (game.difficulty > 3 && Math.random() > 0.7) {
+                    setTimeout(() => createCircle(), 150);
+                }
             }
             
             // Обновляем и рисуем круги
@@ -574,7 +820,13 @@
             // Выбираем случайный цвет
             const color = game.colors[Math.floor(Math.random() * game.colors.length)];
             
-            game.circles.push(new HitCircle(x, y, time, color));
+            // На высоких уровнях сложности иногда создаем меньшие круги
+            let sizeMultiplier = 1;
+            if (game.difficulty > 3 && Math.random() > 0.7) {
+                sizeMultiplier = 0.7;
+            }
+            
+            game.circles.push(new HitCircle(x, y, time, color, sizeMultiplier));
         }
         
         // Обновление всех кругов
@@ -616,11 +868,23 @@
             // Бонус за комбо
             points += Math.floor(game.combo / 10) * 10;
             
+            // Множитель за сложность
+            points = Math.floor(points * (1 + (game.difficulty * 0.2)));
+            
             // Обновляем счет
             game.score += points;
             game.hits++;
             game.totalHits++;
             game.combo++;
+            game.comboForLife++;
+            
+            // Восстанавливаем жизнь каждые 10 комбо
+            if (game.comboForLife >= 10 && game.lives < game.maxLives) {
+                game.lives++;
+                game.comboForLife = 0;
+                updateLivesDisplay();
+                createLifeRestoreEffect(circle.x, circle.y);
+            }
             
             // Рассчитываем точность
             game.accuracy = ((game.hits / game.totalHits) * 100).toFixed(1);
@@ -642,12 +906,33 @@
             showHitFeedback(popupText, hitType);
         }
         
+        // Создание эффекта восстановления жизни
+        function createLifeRestoreEffect(x, y) {
+            const effect = document.createElement('div');
+            effect.className = 'combo-popup';
+            effect.textContent = 'ЖИЗНЬ +1';
+            effect.style.left = `${x}px`;
+            effect.style.top = `${y}px`;
+            effect.style.color = '#ff416c';
+            effect.style.fontSize = '1.8rem';
+            
+            document.querySelector('.game-area').appendChild(effect);
+            
+            setTimeout(() => {
+                effect.remove();
+            }, 1000);
+        }
+        
         // Обработка промаха
         function handleMiss() {
             game.misses++;
             game.totalHits++;
             game.combo = 0;
-            game.missCount++;
+            game.comboForLife = 0;
+            game.lives--;
+            
+            // Обновляем отображение жизней
+            updateLivesDisplay();
             
             // Рассчитываем точность
             game.accuracy = ((game.hits / game.totalHits) * 100).toFixed(1);
@@ -660,7 +945,7 @@
             showHitFeedback('ПРОПУЩЕНО!', 'miss');
             
             // Проверяем окончание игры
-            if (game.missCount >= game.maxMisses) {
+            if (game.lives <= 0) {
                 endGame();
             }
         }
@@ -691,7 +976,9 @@
             popup.style.top = `${y}px`;
             
             // Цвет в зависимости от комбо
-            if (game.combo >= 20) {
+            if (game.combo >= 30) {
+                popup.style.color = '#ff0000';
+            } else if (game.combo >= 20) {
                 popup.style.color = '#f72585';
             } else if (game.combo >= 10) {
                 popup.style.color = '#4cc9f0';
@@ -724,7 +1011,28 @@
             
             startButton.textContent = 'Новая игра';
             
-            gameStatus.textContent = `ИГРА ОКОНЧЕНА! Счет: ${game.score}`;
+            // Определяем оценку в зависимости от счета
+            let grade = '';
+            let gradeColor = '';
+            
+            if (game.score > 5000) {
+                grade = 'SS';
+                gradeColor = '#ffd700';
+            } else if (game.score > 3000) {
+                grade = 'S';
+                gradeColor = '#ff6b6b';
+            } else if (game.score > 1500) {
+                grade = 'A';
+                gradeColor = '#4cc9f0';
+            } else if (game.score > 800) {
+                grade = 'B';
+                gradeColor = '#72efdd';
+            } else {
+                grade = 'C';
+                gradeColor = '#999';
+            }
+            
+            gameStatus.innerHTML = `ИГРА ОКОНЧЕНА!<br>Счет: ${game.score}<br><span style="color:${gradeColor}; font-size:4rem;">${grade}</span>`;
             gameStatus.className = 'game-status';
             gameStatus.style.opacity = '1';
         }
@@ -742,8 +1050,8 @@
                 circle.draw(ctx);
             });
             
-            // Рисуем счетчик пропусков
-            drawMissCounter();
+            // Рисуем индикатор сложности на холсте
+            drawDifficultyIndicator();
         }
         
         // Отрисовка фона с сеткой
@@ -783,19 +1091,16 @@
             ctx.stroke();
         }
         
-        // Отрисовка счетчика пропусков
-        function drawMissCounter() {
-            ctx.fillStyle = 'rgba(247, 37, 133, 0.2)';
-            ctx.fillRect(20, canvas.height - 40, 200, 20);
+        // Отрисовка индикатора сложности на холсте
+        function drawDifficultyIndicator() {
+            // Показываем текущий уровень сложности в углу
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(canvas.width - 150, 10, 140, 40);
             
-            ctx.fillStyle = 'rgba(247, 37, 133, 0.8)';
-            const missWidth = (game.missCount / game.maxMisses) * 200;
-            ctx.fillRect(20, canvas.height - 40, missWidth, 20);
-            
-            ctx.fillStyle = '#f72585';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'left';
-            ctx.fillText(`Пропуски: ${game.missCount}/${game.maxMisses}`, 30, canvas.height - 25);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(`Уровень: ${difficultyLevel.textContent}`, canvas.width - 20, 35);
         }
         
         // Обработка кликов по холсту
@@ -822,6 +1127,7 @@
             // Если клик был не по кругу, сбрасываем комбо
             if (game.combo > 0) {
                 game.combo = 0;
+                game.comboForLife = 0;
                 comboElement.textContent = '0';
                 showHitFeedback('КОМБО СБРОШЕНО', 'miss');
             }
